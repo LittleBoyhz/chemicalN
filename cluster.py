@@ -13,6 +13,7 @@ import sklearn.linear_model as sklearn_linear_model
 import sklearn.preprocessing as sklearn_preprocessing
 import sklearn.svm as sklearn_svm
 from sklearn.svm import SVR
+from scipy import spatial
 
 from dataset_container import *
 from sampling_methods import *
@@ -306,6 +307,8 @@ def main():
         kmeans = KMeans(n_clusters=n_clusters)
         kmeans.fit(all_low)
         clusters_train = kmeans.labels_
+        
+        # 以上聚类结束，后面进行权重统计
         sum = [0] * n_clusters
         num = [0] * n_clusters
         for i in range(len(low_x)):
@@ -374,6 +377,68 @@ def main():
                 f.write(str(an))
                 f.write('\n')
     # cluster_dbscan()
+    
+    #TODO:聚类方法
+    def cluster_kcenter():
+        k = 60
+        centers = np.zeros([k, all_low.shape[1]])
+        centers[0, : ] = all_low[random.randint(0, all_low.shape[0]-1) , : ]
+        cluster_idx = [0 for i in range(all_low.shape[0])]
+        num_centers = 1
+        dist = spatial.distance.cdist(all_low, centers[range(num_centers), : ], 'euclidean').min(1)
+        
+        while num_centers < k:
+            idx = dist.argmax()
+            centers[num_centers, : ] = all_low[idx, : ]
+            num_centers += 1
+            tmp_dist = spatial.distance.cdist(all_low, [all_low[idx, : ]], 'euclidean').min(1)
+            concate_dist = np.vstack(dist, tmp_dist)
+            tmp_dist_smaller = concate_dist.argmin(0)
+            dist = concate_dist.min(0)
+            cluster_idx[tmp_dist_smaller == 1] = num_centers
+        
+        sum = [0] * k
+        num = [0] * k
+        dicts = []
+        for i in range(k):
+            dicts.append([])
+        for i in range(len(low_x)):
+            dicts[cluster_idx[i]].append(low_y[i])
+            num[cluster_idx[i]] += 1
+            sum[cluster_idx[i]] += low_y[i]
+        average = []
+        for i in range(len(sum)):
+            if num[i]:
+                average.append(sum[i] / num[i])
+            else:
+                average.append(0)
+        def mean_abs_dev(arr):
+            mea = np.mean(arr)
+            abs_dev = [abs(x - mea) for x in arr]
+            return np.mean(abs_dev)
+        vars = []
+        svars = []
+        ddd = []
+        for it in dicts:
+            arr = np.array(it)
+            variance = np.var(arr)
+            dd = mean_abs_dev(arr)
+            vars.append(variance)
+            ddd.append(dd)
+            svars.append(variance**0.5)
+        #print(average)
+        #print(vars)
+        print(mean(vars))
+        #print(ddd)
+        #print(svars)
+        
+        with open('put.csv', 'w') as f:
+            for it in cluster_idx:
+                f.write(str(it) + '\n')
+    # cluster_kcenter()
+    
+    def cluster_kmedian():
+        pass
 
 if __name__ == "__main__":
     main()
