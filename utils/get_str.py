@@ -6,19 +6,20 @@ import pandas
 import pandas as pd
 import xlrd2
 
-import morgan_fingerprint as mfp
-import one_hot_encoding as ohe
-
 import utils
 import random
+
 import pka_bde
 import mdr_descriptors
 import myrxnfp
+import homolomo
+import morgan_fingerprint as mfp
+import one_hot_encoding as ohe
 
 class Arguments:
     def __init__(self, split_mode, representation):
         self.data_folder = "../datasets/real"
-        self.dataset = "real_4"
+        self.dataset = "real_6"
         self.sheet_name = "Sheet1"
 
         self.split_mode = split_mode  # {1, 2, 3, 4, 5}
@@ -32,7 +33,7 @@ def main():
     strs = input("filename")
     type = input("test or train")
     sms = [0]
-    reprs = ["pka_bde01", "morgan_fp", "Mordred", "rxnfp"]
+    reprs = ["pka_bde01", "morgan_fp", "Mordred", "homo"]
 
     for split_mode in sms:
         for representation in reprs:
@@ -59,57 +60,32 @@ def main():
             if not os.path.exists(save_folder):
                 os.makedirs(save_folder)
             prefix = args.dataset + "_" + args.representation
-            if type == "test":
-                if args.representation == "Mordred":
-                    flattened_encoding_of_dataset, yields = mdr_descriptors.encode_dataset(sheet, num_columns_of_sheet)
+            
+            if args.representation == "morgan_fp":
+                for dim_molecule in args.morgan_fp_dims:
+                    flattened_encoding_of_dataset, yields = mfp.encode_dataset(sheet, num_columns_of_sheet, dim_molecule)
                     if args.save:
-                        np.savez(os.path.join(save_folder, prefix + "_test.npz"),
-                                test_data=flattened_encoding_of_dataset, test_labels=yields)
-                elif args.representation == "morgan_fp":
-                    for dim_molecule in args.morgan_fp_dims:
-                        flattened_encoding_of_dataset, yields = mfp.encode_dataset(sheet, num_columns_of_sheet, dim_molecule)
-                        if args.save:
-                            curr_prefix = prefix + "_" + str(dim_molecule)
-                            data_file = os.path.join(save_folder, curr_prefix + "_test.npz")
+                        curr_prefix = prefix + "_" + str(dim_molecule)
+                        data_file = os.path.join(save_folder, curr_prefix + "_" + type + ".npz")
+                        if type == "test":
                             np.savez(data_file, test_data=flattened_encoding_of_dataset, test_labels=yields)
-                elif args.representation == "pka_bde01":
-                    flattened_encoding_of_dataset, yields = pka_bde.encode_dataset(sheet, num_columns_of_sheet, args, True, 6)
-                    if args.save:
-                        data_file = os.path.join(save_folder, prefix + "_test.npz")
-                        np.savez(data_file, test_data=flattened_encoding_of_dataset, test_labels=yields)
-                elif args.representation == "rxnfp":
-                    flattened_encoding_of_dataset, yields = myrxnfp.encode_dataset(sheet, num_columns_of_sheet)
-                    if args.save:
-                        data_file = os.path.join(save_folder, prefix + "_test.npz")
-                        np.savez(data_file, test_data=flattened_encoding_of_dataset, test_labels=yields)
-                else:
-                    raise ValueError("Unknown representaton {}".format(args.representation))
+                        else:
+                            np.savez(data_file, train_data=flattened_encoding_of_dataset, train_labels=yields)
             else:
                 if args.representation == "Mordred":
                     flattened_encoding_of_dataset, yields = mdr_descriptors.encode_dataset(sheet, num_columns_of_sheet)
-                    if args.save:
-                        np.savez(os.path.join(save_folder, prefix + "_train.npz"),
-                                train_data=flattened_encoding_of_dataset, train_labels=yields)
-                elif args.representation == "morgan_fp":
-                    for dim_molecule in args.morgan_fp_dims:
-                        flattened_encoding_of_dataset, yields = mfp.encode_dataset(sheet, num_columns_of_sheet, dim_molecule)
-                        if args.save:
-                            curr_prefix = prefix + "_" + str(dim_molecule)
-                            data_file = os.path.join(save_folder, curr_prefix + "_train.npz")
-                            np.savez(data_file, train_data=flattened_encoding_of_dataset, train_labels=yields)
                 elif args.representation == "pka_bde01":
                     flattened_encoding_of_dataset, yields = pka_bde.encode_dataset(sheet, num_columns_of_sheet, args, True, 6)
-                    if args.save:
-                        data_file = os.path.join(save_folder, prefix + "_train.npz")
-                        np.savez(data_file, train_data=flattened_encoding_of_dataset, train_labels=yields)
                 elif args.representation == "rxnfp":
                     flattened_encoding_of_dataset, yields = myrxnfp.encode_dataset(sheet, num_columns_of_sheet)
-                    if args.save:
-                        data_file = os.path.join(save_folder, prefix + "_train.npz")
-                        np.savez(data_file, train_data=flattened_encoding_of_dataset, train_labels=yields)
+                elif args.representation == "homo":
+                    flattened_encoding_of_dataset, yields = homolomo.encode_dataset(sheet, num_columns_of_sheet, args)
+                if type == "test":
+                    np.savez(os.path.join(save_folder, prefix + "_" + type + ".npz"),
+                         test_data=flattened_encoding_of_dataset, test_labels=yields)
                 else:
-                    raise ValueError("Unknown representaton {}".format(args.representation))
-
+                    np.savez(os.path.join(save_folder, prefix + "_" + type + ".npz"),
+                         train_data=flattened_encoding_of_dataset, train_labels=yields)
             print("\n")
 
 if __name__ == "__main__":

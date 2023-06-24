@@ -4,7 +4,7 @@ import xlrd2
 import xlwt
 import xlrd
 
-total_num = 119
+total_num = 102
 test_ratio = 0.3
 test_num = int(total_num * test_ratio)
 
@@ -18,7 +18,7 @@ for num in numbers:
         n_random_numbers.append(num)
 
 # Open the Excel file
-workbook = xlrd2.open_workbook('real_6_smiles_yields_product_update.xlsx')
+workbook = xlrd2.open_workbook('real_6_smiles_yields_product_pure_update.xlsx')
 sheet = workbook.sheet_by_index(0)
 
 # Read the rows
