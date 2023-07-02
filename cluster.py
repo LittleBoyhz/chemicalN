@@ -26,7 +26,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import r2_score
 
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, BisectingKMeans
 from sklearn.metrics.pairwise import cosine_similarity
 
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -39,6 +39,24 @@ import hdbscan
 import torch.nn.functional as F
 
 from statistics import mean
+
+def mean_abs_dev(arr):
+    mea = np.mean(arr)
+    abs_dev = [abs(x - mea) for x in arr]
+    return np.mean(abs_dev)
+
+def assign_weight(cluster_idx, k, x, y):
+    dicts = [[] for i in range(k)]
+    for i in range(len(x)):
+        dicts[cluster_idx[i]].append(y[i])
+    sum = [np.sum(dicts[i]) for i in range(k)]
+    average = []
+    for i in range(k):
+        if len(dicts[i]):
+            average.append(sum[i] / len(dicts[i]))
+        else:
+            average.append(0)
+    return dicts, average
 
 def loss_function_vae(x_hat, x, mu, log_var, criterion):
     MSE = criterion(x_hat, x)
@@ -301,30 +319,13 @@ def main():
 
     def kmeans_cluster():
         n_clusters = 60
-        dicts = []
-        for cluster_label in range(n_clusters):
-            dicts.append([])
         kmeans = KMeans(n_clusters=n_clusters)
         kmeans.fit(all_low)
         clusters_train = kmeans.labels_
         
         # 以上聚类结束，后面进行权重统计
-        sum = [0] * n_clusters
-        num = [0] * n_clusters
-        for i in range(len(low_x)):
-            dicts[clusters_train[i]].append(low_y[i])
-            num[clusters_train[i]] += 1
-            sum[clusters_train[i]] += low_y[i]
-        average = []
-        for i in range(len(sum)):
-            if num[i]:
-                average.append(sum[i]/num[i])
-            else:
-                average.append(0)
-        def mean_abs_dev(arr):
-            mea = np.mean(arr)
-            abs_dev = [abs(x - mea) for x in arr]
-            return np.mean(abs_dev)
+        dicts, average = assign_weight(clusters_train, n_clusters, low_x, low_y)
+                
         vars = []
         svars = []
         ddd = []
@@ -342,7 +343,7 @@ def main():
         #print(svars)
         
         with open('put.csv', 'w') as f:
-            for it in kmeans.labels_:
+            for it in clusters_train:
                 f.write(str(it) + '\n')
     kmeans_cluster()
 
@@ -383,39 +384,22 @@ def main():
         k = 60
         centers = np.zeros([k, all_low.shape[1]])
         centers[0, : ] = all_low[random.randint(0, all_low.shape[0]-1) , : ]
-        cluster_idx = [0 for i in range(all_low.shape[0])]
+        cluster_idx = np.array([0 for i in range(all_low.shape[0])])
         num_centers = 1
         dist = spatial.distance.cdist(all_low, centers[range(num_centers), : ], 'euclidean').min(1)
         
         while num_centers < k:
             idx = dist.argmax()
             centers[num_centers, : ] = all_low[idx, : ]
-            num_centers += 1
             tmp_dist = spatial.distance.cdist(all_low, [all_low[idx, : ]], 'euclidean').min(1)
-            concate_dist = np.vstack(dist, tmp_dist)
+            concate_dist = np.vstack((dist, tmp_dist))
             tmp_dist_smaller = concate_dist.argmin(0)
             dist = concate_dist.min(0)
             cluster_idx[tmp_dist_smaller == 1] = num_centers
+            num_centers += 1
         
-        sum = [0] * k
-        num = [0] * k
-        dicts = []
-        for i in range(k):
-            dicts.append([])
-        for i in range(len(low_x)):
-            dicts[cluster_idx[i]].append(low_y[i])
-            num[cluster_idx[i]] += 1
-            sum[cluster_idx[i]] += low_y[i]
-        average = []
-        for i in range(len(sum)):
-            if num[i]:
-                average.append(sum[i] / num[i])
-            else:
-                average.append(0)
-        def mean_abs_dev(arr):
-            mea = np.mean(arr)
-            abs_dev = [abs(x - mea) for x in arr]
-            return np.mean(abs_dev)
+        dicts, average = assign_weight(cluster_idx, k, low_x, low_y)
+
         vars = []
         svars = []
         ddd = []
@@ -458,25 +442,8 @@ def main():
             for i in range(k):
                 medians[i] = np.median(all_low[cluster_idx == i], axis=0)
         
-        sum = [0] * k
-        num = [0] * k
-        dicts = []
-        for i in range(k):
-            dicts.append([])
-        for i in range(len(low_x)):
-            dicts[cluster_idx[i]].append(low_y[i])
-            num[cluster_idx[i]] += 1
-            sum[cluster_idx[i]] += low_y[i]
-        average = []
-        for i in range(len(sum)):
-            if num[i]:
-                average.append(sum[i] / num[i])
-            else:
-                average.append(0)
-        def mean_abs_dev(arr):
-            mea = np.mean(arr)
-            abs_dev = [abs(x - mea) for x in arr]
-            return np.mean(abs_dev)
+        dicts, average = assign_weight(cluster_idx, k, low_x, low_y)
+        
         vars = []
         svars = []
         ddd = []
@@ -496,7 +463,35 @@ def main():
         with open('put.csv', 'w') as f:
             for it in cluster_idx:
                 f.write(str(it) + '\n')
-    # cluster_kmedians()
+    # cluster_kmedian()
+    
+    def cluster_bisectingKMeans():
+        k = 60
+        bisect_means = BisectingKMeans(n_clusters=k, random_state=0).fit(all_low)
+        clusters_train = bisect_means.labels_
+        
+        dicts, average = assign_weight(clusters_train, k, low_x, low_y)
+                
+        vars = []
+        svars = []
+        ddd = []
+        for it in dicts:
+            arr = np.array(it)
+            variance = np.var(arr)
+            dd = mean_abs_dev(arr)
+            vars.append(variance)
+            ddd.append(dd)
+            svars.append(variance**0.5)
+        #print(average)
+        #print(vars)
+        print(mean(vars))
+        #print(ddd)
+        #print(svars)
+        
+        with open('put.csv', 'w') as f:
+            for it in clusters_train:
+                f.write(str(it) + '\n')
+    # cluster_bisectingKMeans()
 
 if __name__ == "__main__":
     main()
